@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Online Bookstore</title>
+<style>
+:root{--bg:#f6f4ef;--card:#fff;--ink:#222;--mut:#6b6b6b;--acc:#8a4b2a;--ok:#1f7a45;--err:#b3261e;--line:#e3ded3}
+*{box-sizing:border-box}body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:var(--acc);color:#fff;padding:12px 24px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+header h1{font-size:20px;margin:0;margin-right:auto}header a{color:#fff;cursor:pointer;text-decoration:none;font-size:14px;opacity:.9}
+header a:hover{opacity:1;text-decoration:underline}main{max-width:1000px;margin:20px auto;padding:0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.book h3{margin:0 0 4px;font-size:15px}.mut{color:var(--mut);font-size:13px}.price{font-weight:600;color:var(--acc)}
+input,select,textarea{padding:7px 9px;border:1px solid #bbb;border-radius:5px;font:inherit;margin:3px 0}
+button{background:var(--acc);color:#fff;border:0;border-radius:5px;padding:8px 14px;cursor:pointer;font:inherit}
+button.sec{background:#fff;color:var(--acc);border:1px solid var(--acc)}button.danger{background:var(--err)}
+.msg{padding:8px 12px;border-radius:5px;margin-bottom:12px;font-size:14px}.msg.err{background:#fde8e6;color:var(--err)}.msg.ok{background:#e3f4ea;color:var(--ok)}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.badge{display:inline-block;padding:2px 9px;border-radius:10px;background:#eee;font-size:12px}
+.badge.Confirmed,.badge.Delivered{background:#e3f4ea;color:var(--ok)}.badge.Pending,.badge.Shipped{background:#fff3d6;color:#8a6100}.badge.Cancelled{background:#fde8e6;color:var(--err)}
+.low{color:var(--err);font-weight:600}
+</style></head><body>
+<header><h1>&#128214; Online Bookstore</h1>
+<a id="nav-books" onclick="show('books')">Books</a><a id="nav-cart" onclick="show('cart')">Cart</a>
+<a id="nav-orders" onclick="show('orders')">Orders</a><a id="nav-profile" onclick="show('profile')">Profile</a>
+<a id="nav-admin" onclick="show('admin')" style="display:none">Admin</a>
+<a id="nav-login" onclick="show('login')">Login</a><a id="nav-register" onclick="show('register')">Register</a>
+<a id="nav-logout" onclick="logout()" style="display:none">Logout</a><span id="welcome"></span></header>
+<main><div id="msg"></div><div id="view"></div></main>
+<script>
+let token=localStorage.getItem('tok')||'',role=localStorage.getItem('role')||'',uname=localStorage.getItem('uname')||'';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function flash(t,ok){$('#msg').innerHTML=t?`<div class="msg ${ok?'ok':'err'}" id="flash">${esc(t)}</div>`:''}
+async function api(path,method='GET',body){
+  const r=await fetch(path,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:body?JSON.stringify(body):undefined});
+  const d=await r.json().catch(()=>({}));return {ok:r.ok,status:r.status,d};
+}
+function chrome(){
+  const li=!!token;$('#nav-login').style.display=li?'none':'';$('#nav-register').style.display=li?'none':'';
+  $('#nav-logout').style.display=li?'':'none';$('#nav-admin').style.display=role==='admin'?'':'none';
+  $('#welcome').textContent=li?'Welcome, '+uname:'';$('#welcome').id='welcome';
+}
+function show(v,arg){flash('');chrome();({books,book,cart,orders,profile,admin,login,register,reset})[v](arg)}
+async function books(){
+  $('#view').innerHTML=`<div class="card row"><input id="q" placeholder="Search title or author">
+  <select id="genre"><option value="">All genres</option>${['Fiction','Technology','History','Science','Self-Help'].map(g=>`<option>${g}</option>`).join('')}</select>
+  <input id="min" type="number" placeholder="Min price" style="width:110px"><input id="max" type="number" placeholder="Max price" style="width:110px">
+  <button id="apply" onclick="loadBooks()">Search</button></div><div id="list" class="grid"></div>`;loadBooks();
+}
+async function loadBooks(){
+  const p=new URLSearchParams();for(const k of['q','genre','min','max']){const v=$('#'+k).value;if(v)p.set(k,v)}
+  const {ok,d}=await api('/api/books?'+p);if(!ok){flash(d.error);return}
+  $('#list').innerHTML=d.books.length?d.books.map(b=>`<div class="card book"><h3><a href="#" onclick="show('book',${b.book_id});return false">${esc(b.title)}</a></h3>
+  <div class="mut">${esc(b.author)} &middot; ${esc(b.genre)}</div><div class="price">&#8377;${b.price}</div>
+  <div class="mut">${b.stock>0?'In stock ('+b.stock+')':'Out of stock'}</div></div>`).join(''):`<div id="empty" class="mut">${esc(d.message)}</div>`;
+}
+async function book(id){
+  const {d}=await api('/api/books/'+id);
+  $('#view').innerHTML=`<div class="card"><h2 id="bt">${esc(d.title)}</h2><div class="mut">${esc(d.author)} &middot; ${esc(d.genre)} &middot; ISBN ${esc(d.isbn)}</div>
+  <p>${esc(d.description)}</p><p class="price" id="bp">&#8377;${d.price}</p><p>${d.in_stock?'In stock ('+d.stock+' left)':'Out of stock'} &middot; Rating: <b id="avg">${d.average_rating??'no ratings yet'}</b></p>
+  <div class="row"><input id="qty" type="number" value="1" min="1" style="width:70px"><button id="add" onclick="addCart(${id})">Add to Cart</button></div></div>
+  <div class="card"><h3>Reviews</h3><div id="revs">${d.reviews.map(r=>`<p><b>${'&#9733;'.repeat(r.rating)}</b> ${esc(r.comment)} <span class="mut">- ${esc(r.name)}</span></p>`).join('')||'<p class="mut">No reviews yet</p>'}</div>
+  <div class="row"><input id="rating" type="number" placeholder="Rating 1-5" style="width:110px"><input id="comment" placeholder="Write a review" style="flex:1"><button id="submit-review" onclick="review(${id})">Submit</button></div></div>`;
+}
+async function addCart(id){
+  if(!token){flash('Please log in first');return}
+  const {ok,d}=await api('/api/cart','POST',{book_id:id,quantity:parseInt($('#qty').value)});flash(ok?'Added to cart':d.error,ok)}
+async function review(id){
+  if(!token){flash('Please log in first');return}
+  const {ok,d}=await api(`/api/books/${id}/reviews`,'POST',{rating:parseInt($('#rating').value),comment:$('#comment').value});
+  if(ok)await book(id);flash(ok?'Review added':d.error,ok)}
+async function cart(){
+  if(!token)return show('login');const {d}=await api('/api/cart');
+  $('#view').innerHTML=`<div class="card"><h2>Your Cart</h2>${d.items.length?`<table id="cart-table"><tr><th>Title</th><th>Price</th><th>Qty</th><th>Line total</th><th></th></tr>
+  ${d.items.map(i=>`<tr><td>${esc(i.title)}</td><td>&#8377;${i.price}</td><td><input type="number" min="1" value="${i.quantity}" style="width:64px" onchange="setQty(${i.cart_item_id},this.value)"></td><td>&#8377;${i.line_total}</td><td><button class="sec" onclick="rmItem(${i.cart_item_id})">Remove</button></td></tr>`).join('')}</table>`:'<p id="empty-cart" class="mut">Your cart is empty</p>'}
+  <h3>Total: &#8377;<span id="total">${d.total}</span></h3>
+  <div class="row"><input id="card" placeholder="Card number" value="4111111111111111" style="width:200px"><button id="checkout" onclick="checkout()">Checkout and Pay</button></div></div>`;
+}
+async function setQty(i,v){const {ok,d}=await api('/api/cart/'+i,'PUT',{quantity:parseInt(v)});await cart();if(!ok)flash(d.error)}
+async function rmItem(i){await api('/api/cart/'+i,'DELETE');cart()}
+async function checkout(){
+  const card=$('#card').value;const {ok,d}=await api('/api/orders','POST',{card});await cart();
+  flash(ok?`Order #${d.order_id} confirmed. Total ₹${d.total}. Ref ${d.txn_ref}`:(d.error||'Error'),ok)}
+async function orders(){
+  if(!token)return show('login');const {d}=await api('/api/orders');
+  $('#view').innerHTML=`<div class="card"><h2>Order History</h2>${d.orders.length?`<table id="orders-table"><tr><th>Order</th><th>Date</th><th>Items</th><th>Total</th><th>Status</th><th></th></tr>
+  ${d.orders.map(o=>`<tr><td>#${o.order_id}</td><td>${esc(o.created_at)}</td><td>${o.items.map(i=>esc(i.title)+' x'+i.quantity).join(', ')}</td><td>&#8377;${o.total}</td><td><span class="badge ${o.status}">${o.status}</span></td>
+  <td>${['Pending','Confirmed'].includes(o.status)?`<button class="danger" onclick="cancelOrder(${o.order_id})">Cancel</button>`:''}</td></tr>`).join('')}</table>`:'<p class="mut">No orders yet</p>'}</div>`;
+}
+async function cancelOrder(i){const {ok,d}=await api(`/api/orders/${i}/cancel`,'POST');await orders();flash(ok?'Order cancelled':d.error,ok)}
+async function profile(){
+  if(!token)return show('login');const {d}=await api('/api/users/me');
+  $('#view').innerHTML=`<div class="card"><h2>My Profile</h2><div class="mut">${esc(d.email)}</div><p>Name<br><input id="pname" value="${esc(d.name)}"></p>
+  <p>Delivery address<br><textarea id="paddr" rows="3" cols="40">${esc(d.address)}</textarea></p><button id="save-profile" onclick="saveProfile()">Save</button></div>`;
+}
+async function saveProfile(){const {ok,d}=await api('/api/users/me','PUT',{name:$('#pname').value,address:$('#paddr').value});flash(ok?'Profile updated':d.error,ok)}
+function login(){$('#view').innerHTML=`<div class="card" style="max-width:380px"><h2>Login</h2><input id="email" placeholder="Email" style="width:100%"><input id="pw" type="password" placeholder="Password" style="width:100%">
+  <div class="row"><button id="do-login" onclick="doLogin()">Login</button><a href="#" onclick="show('reset');return false">Forgot password?</a></div></div>`}
+async function doLogin(){const {ok,d}=await api('/api/auth/login','POST',{email:$('#email').value,password:$('#pw').value});
+  if(!ok){flash(d.error);return}token=d.token;role=d.role;uname=d.name;localStorage.setItem('tok',token);localStorage.setItem('role',role);localStorage.setItem('uname',uname);show('books');flash('Login successful. Welcome, '+uname,true)}
+async function logout(){await api('/api/auth/logout','POST');token=role=uname='';localStorage.clear();show('login');flash('Logged out',true)}
+function register(){$('#view').innerHTML=`<div class="card" style="max-width:380px"><h2>Register</h2><input id="rname" placeholder="Name" style="width:100%"><input id="remail" placeholder="Email" style="width:100%"><input id="rpw" type="password" placeholder="Password" style="width:100%">
+  <button id="do-register" onclick="doRegister()">Submit</button></div>`}
+async function doRegister(){const {ok,d}=await api('/api/auth/register','POST',{name:$('#rname').value,email:$('#remail').value,password:$('#rpw').value});
+  if(ok){show('login');flash('Account created. Please log in.',true)}else flash(d.error)}
+function reset(){$('#view').innerHTML=`<div class="card" style="max-width:380px"><h2>Reset password</h2><input id="remail2" placeholder="Email" style="width:100%"><button id="send-reset" onclick="doReset()">Send Link</button></div>`}
+async function doReset(){const {d}=await api('/api/auth/reset','POST',{email:$('#remail2').value});flash(d.message,true)}
+async function admin(){
+  if(role!=='admin')return show('login');
+  const [ls,rep,bk]=await Promise.all([api('/api/admin/low-stock'),api('/api/admin/reports/sales'),api('/api/books')]);
+  $('#view').innerHTML=`<div class="card"><h2>Admin - Add Book</h2><div class="row"><input id="a-title" placeholder="Title"><input id="a-author" placeholder="Author"><input id="a-genre" placeholder="Genre">
+  <input id="a-isbn" placeholder="ISBN"><input id="a-price" type="number" placeholder="Price" style="width:90px"><input id="a-stock" type="number" placeholder="Stock" style="width:90px"><button id="a-save" onclick="addBook()">Save</button></div></div>
+  <div class="card"><h2>Inventory</h2><table><tr><th>ID</th><th>Title</th><th>Price</th><th>Stock</th><th></th></tr>${bk.d.books.map(b=>`<tr><td>${b.book_id}</td><td>${esc(b.title)}</td><td>&#8377;${b.price}</td><td class="${b.stock<5?'low':''}">${b.stock}</td><td><button class="danger" onclick="delBook(${b.book_id})">Delete</button></td></tr>`).join('')}</table></div>
+  <div class="card"><h2>Low-stock alerts (below ${ls.d.threshold})</h2>${ls.d.books.map(b=>`<div class="low">${esc(b.title)} - ${b.stock} left</div>`).join('')||'<p class="mut">None</p>'}</div>
+  <div class="card"><h2>Sales report</h2><p>Total revenue: <b id="revenue">&#8377;${rep.d.total_revenue}</b></p><table><tr><th>Top-selling books</th><th>Sold</th></tr>${rep.d.top_books.map(t=>`<tr><td>${esc(t.title)}</td><td>${t.sold}</td></tr>`).join('')}</table></div>`;
+}
+async function addBook(){const g=i=>$('#a-'+i).value;const {ok,d}=await api('/api/admin/books','POST',{title:g('title'),author:g('author'),genre:g('genre'),isbn:g('isbn'),price:parseFloat(g('price')),stock:parseInt(g('stock'))});
+  if(ok){await admin();flash('Book saved',true)}else flash(d.error)}
+async function delBook(i){await api('/api/admin/books/'+i,'DELETE');admin()}
+chrome();show('books');
+</script></body></html>
